@@ -3,13 +3,13 @@ class Curl < Formula
   homepage "https://curl.haxx.se/"
   url "https://curl.haxx.se/download/curl-7.48.0.tar.bz2"
   sha256 "864e7819210b586d42c674a1fdd577ce75a78b3dda64c63565abe5aefd72c753"
+  revision 1
 
   bottle do
     cellar :any
-    revision 1
-    sha256 "6784a9831c900267195b6d8536ae3a1716665d5918899b95294bbf6c75f9941d" => :el_capitan
-    sha256 "6387cc1a58ff7bb7349f00bea22016a87b9345451b0432b2edc59aaa611cbccf" => :yosemite
-    sha256 "89536ee67d5fc50734ff50e3c55631321a425a99f76f4dd8be2dac84e699f0d7" => :mavericks
+    sha256 "025bd02057b5761dde11a317fd803b7379f8d95784dede48d892489d772d30c1" => :el_capitan
+    sha256 "b54803ed4f3910bd38a1b89b7d387a64bcd62471d430c65599936b696b50292d" => :yosemite
+    sha256 "0f3b4cb6a1ca1e103bbe959dae03150903a7ef3a3acd3757a7d016d5aae04604" => :mavericks
   end
 
   keg_only :provided_by_osx
@@ -53,12 +53,12 @@ class Curl < Formula
   patch :DATA
 
   def install
-    # Throw an error if someone actually tries to rock both SSL choices.
-    # Long-term, make this singular-ssl-option-only a requirement.
+    # Fail if someone tries to use both SSL choices.
+    # Long-term, handle conflicting options case in core code.
     if build.with?("libressl") && build.with?("openssl")
-      ohai <<-EOS.undent
+      odie <<-EOS.undent
       --with-openssl and --with-libressl are both specified and
-      curl can only use one at a time; proceeding with libressl.
+      curl can only use one at a time.
       EOS
     end
 
@@ -73,11 +73,11 @@ class Curl < Formula
     # "--with-ssl" any more. "when possible, set the PKG_CONFIG_PATH environment
     # variable instead of using this option". Multi-SSL choice breaks w/o using it.
     if build.with? "libressl"
-      ENV.prepend_path "PKG_CONFIG_PATH", "#{Formula["libressl"].opt_prefix}/lib/pkgconfig"
+      ENV.prepend_path "PKG_CONFIG_PATH", "#{Formula["libressl"].opt_lib}/pkgconfig"
       args << "--with-ssl=#{Formula["libressl"].opt_prefix}"
       args << "--with-ca-bundle=#{etc}/libressl/cert.pem"
     elsif MacOS.version < :mountain_lion || build.with?("openssl") || build.with?("nghttp2")
-      ENV.prepend_path "PKG_CONFIG_PATH", "#{Formula["openssl"].opt_prefix}/lib/pkgconfig"
+      ENV.prepend_path "PKG_CONFIG_PATH", "#{Formula["openssl"].opt_lib}/pkgconfig"
       args << "--with-ssl=#{Formula["openssl"].opt_prefix}"
       args << "--with-ca-bundle=#{etc}/openssl/cert.pem"
     else
@@ -98,6 +98,7 @@ class Curl < Formula
 
     system "./configure", *args
     system "make", "install"
+    libexec.install "lib/mk-ca-bundle.pl"
   end
 
   test do
@@ -106,6 +107,10 @@ class Curl < Formula
     filename = (testpath/"test.tar.gz")
     system "#{bin}/curl", "-L", stable.url, "-o", filename
     filename.verify_checksum stable.checksum
+
+    system libexec/"mk-ca-bundle.pl", "test.pem"
+    assert File.exist?("test.pem")
+    assert File.exist?("certdata.txt")
   end
 end
 
